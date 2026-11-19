@@ -429,3 +429,5 @@ FodyWeavers.xsd
 
 !third_party/assimp/bin/
 !third_party/assimp/bin/*.dll
+
+!model.obj
