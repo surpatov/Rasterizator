@@ -1,8 +1,10 @@
-﻿#include <assimp/Importer.hpp>
+﻿
+#include <assimp/Importer.hpp>
 #include <assimp/scene.h>
 #include <assimp/postprocess.h>
 #include <cmath>
 #include <algorithm>
+#include <iostream>
 
 #include "tgaimage.h"
 #include "geometry.h"
@@ -23,7 +25,7 @@ void triangle(Vec3f* pts, IShader& shader, TGAImage& image, float* zbuffer, int 
         for (int x = minX; x <= maxX; x++) {
             Vec3f bary = barycentric(A, B, C, Vec2f((float)x, (float)y));
 
-            if (bary.x < -0.0001 || bary.y < -0.0001 || bary.z < -0.0001) continue;
+            if (bary.x < -0.0001f || bary.y < -0.0001f || bary.z < -0.0001f) continue;
 
             float z = bary.x * pts[0].z + bary.y * pts[1].z + bary.z * pts[2].z;
             int idx = x + y * width;
@@ -48,34 +50,26 @@ int main() {
     for (int i = 0; i < width * height; i++) zbuffer[i] = -1e9f;
 
     Assimp::Importer importer;
-    const aiScene* scene = importer.ReadFile("model.obj",
-        aiProcess_Triangulate | aiProcess_FlipUVs |
-        aiProcess_GenSmoothNormals | aiProcess_JoinIdenticalVertices);
+    const aiScene* scene = importer.ReadFile("model.obj", 
+        aiProcess_Triangulate | aiProcess_FlipUVs | 
+        aiProcess_GenSmoothNormals | aiProcess_JoinIdenticalVertices
+    );
 
     TGAImage texture;
     texture.read_tga_file("texture.tga");
 
-    Camera camera(
-        Vec3f(-0.9f, 0.6f, 0.2f),
-        Vec3f(0, 0, 0),
-        Vec3f(0, 1, 0),
-        70.0f,
-        (float)width / height,
-        0.1f,
-        100.0f
-    );
+    Camera camera(Vec3f(0, 0.7f, 1.2f), Vec3f(0, 0, 0), Vec3f(0, 1, 0), 70.0f, (float)width / height, 0.1f, 100.0f);
 
     Mat4 view = camera.getViewMatrix();
     Mat4 proj = camera.getProjectionMatrix();
-    Mat4 model = Mat4::Scale(Vec3f(1.0f, 1.0f, 1.0f));
+    Mat4 model = Mat4::Scale(Vec3f(1.0f, 1.0f, 1.0f)) * Mat4::RotationY(90.0f);
     Mat4 viewport = Mat4::Viewport(width, height);
 
     Vec3f light(-1.3f, 0.9f, 0.6f);
 
     for (unsigned m = 0; m < scene->mNumMeshes; m++) {
         aiMesh* mesh = scene->mMeshes[m];
-
-        GouraudShader shader(mesh, light, model, view, proj, &texture);
+        PhongShader shader(mesh, light, model, view, proj, camera, &texture);
 
         for (unsigned i = 0; i < mesh->mNumFaces; i++) {
             if (mesh->mFaces[i].mNumIndices != 3) continue;
@@ -88,21 +82,29 @@ int main() {
             Vec3f p1(v1.x, v1.y, v1.z);
             Vec3f p2(v2.x, v2.y, v2.z);
 
-			Vec3f edge1 = p1 - p0;
-			Vec3f edge2 = p2 - p0;
-			Vec3f normal = cross(edge1, edge2);
-			normal.normalize();
+            Vec4 wp0 = model * Vec4(p0.x, p0.y, p0.z, 1.0f);
+            Vec4 wp1 = model * Vec4(p1.x, p1.y, p1.z, 1.0f);
+            Vec4 wp2 = model * Vec4(p2.x, p2.y, p2.z, 1.0f);
 
-            Vec3f center = (p0 + p1 + p2) * (1.0f / 3.0f);
+            Vec3f world_p0(wp0.x, wp0.y, wp0.z);
+            Vec3f world_p1(wp1.x, wp1.y, wp1.z);
+            Vec3f world_p2(wp2.x, wp2.y, wp2.z);
+
+            Vec3f edge1 = world_p1 - world_p0;
+            Vec3f edge2 = world_p2 - world_p0;
+            Vec3f normal = cross(edge1, edge2);
+            normal.normalize();
+
+            Vec3f center = (world_p0 + world_p1 + world_p2) * (1.0f / 3.0f);
             Vec3f view_dir = camera.position - center;
             view_dir.normalize();
 
-            if (dot(normal, view_dir) < 0) continue;
+            if (dot(normal, view_dir) < 0.0f) continue;
 
             Vec3f screen_coords[3];
+
             for (int j = 0; j < 3; j++) {
                 Vec3f ndc = shader.vertex(i, j);
-
                 Vec4 screen = viewport * Vec4(ndc.x, ndc.y, ndc.z, 1.0f);
                 screen_coords[j] = Vec3f(screen.x, screen.y, screen.z);
             }

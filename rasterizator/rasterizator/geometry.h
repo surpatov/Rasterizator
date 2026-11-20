@@ -141,6 +141,20 @@ struct Mat4 {
         res.m[2][2] = s.z;
         return res;
     }
+    static Mat4 RotationY(float angle) {
+        Mat4 res;
+
+        float rad = angle * 3.14159265f / 180.0f;
+        float c = std::cos(rad);
+        float s = std::sin(rad);
+
+        res.m[0][0] = c;
+        res.m[0][2] = s;
+        res.m[2][0] = -s;
+        res.m[2][2] = c;
+
+        return res;
+    }
 };
 
 void triangle(Vec3f* pts, IShader& shader, TGAImage& image, float* zbuffer, int width, int height);
